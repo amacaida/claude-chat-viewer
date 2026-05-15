@@ -18,9 +18,15 @@ interface MessageCardProps {
   message: ChatMessage;
   showThinking: boolean;
   artifactNumberMap: Map<string, number>;
+  humanInitials: string;
 }
 
-const MessageCard: React.FC<MessageCardProps> = ({ message, showThinking, artifactNumberMap }) => {
+const MessageCard: React.FC<MessageCardProps> = ({
+  message,
+  showThinking,
+  artifactNumberMap,
+  humanInitials,
+}) => {
   const isHuman = message.sender === "human";
 
   const renderContent = (content: ChatMessage["content"]) => {
@@ -43,6 +49,67 @@ const MessageCard: React.FC<MessageCardProps> = ({ message, showThinking, artifa
               artifactType={item.input.type || "text"}
               artifactNumber={artifactNum}
             />
+          </div>
+        );
+      }
+
+      if (item.type === "tool_use") {
+        // Non-artifact tool use (artifacts handled above)
+        return (
+          <div
+            key={`${message.uuid}-tooluse-${index}`}
+            className="mx-4 my-2 inline-flex items-center px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-600"
+          >
+            tool: {item.name || "unknown"}
+          </div>
+        );
+      }
+
+      if (item.type === "tool_result") {
+        return (
+          <div
+            key={`${message.uuid}-toolresult-${index}`}
+            className={`mx-4 my-2 inline-flex items-center px-2 py-1 border rounded text-xs ${
+              item.is_error
+                ? "bg-red-50 border-red-200 text-red-700"
+                : "bg-gray-100 border-gray-200 text-gray-600"
+            }`}
+          >
+            tool result{item.name ? `: ${item.name}` : ""}
+            {item.is_error ? " (error)" : ""}
+          </div>
+        );
+      }
+
+      if (item.type === "voice_note") {
+        return (
+          <div key={`${message.uuid}-voice-${index}`} className="p-4">
+            <div className="inline-flex items-center px-2 py-1 mb-2 bg-gray-100 border border-gray-200 rounded text-xs text-gray-600">
+              voice note{item.title ? `: ${item.title}` : ""}
+            </div>
+            {item.text && <div className="text-gray-700 whitespace-pre-wrap">{item.text}</div>}
+          </div>
+        );
+      }
+
+      if (item.type === "thinking") {
+        if (!showThinking) {
+          return (
+            <div
+              key={`${message.uuid}-thinking-hidden-${index}`}
+              className="mx-4 my-2 inline-flex items-center px-2 py-1 bg-purple-50 border border-purple-100 rounded text-xs text-purple-600"
+            >
+              thinking (hidden — toggle "Show thinking" to view)
+            </div>
+          );
+        }
+        return (
+          <div
+            key={`${message.uuid}-thinking-${index}`}
+            className="mx-4 my-4 bg-purple-50 rounded-2xl border border-purple-100 p-4"
+          >
+            <div className="text-sm text-purple-700 mb-2">Thinking Process</div>
+            <div className="text-sm text-purple-600 whitespace-pre-wrap">{item.thinking}</div>
           </div>
         );
       }
@@ -128,7 +195,7 @@ const MessageCard: React.FC<MessageCardProps> = ({ message, showThinking, artifa
               return (
                 <ReactMarkdown
                   key={`${message.uuid}-md-${index}-${segment.type}-${segment.content.slice(0, 16)}`}
-                  className="prose font-serif max-w-none leading-loose"
+                  className="prose font-serif max-w-none leading-loose prose-code:before:content-none prose-code:after:content-none"
                   components={{
                     code({ className, children, ...props }) {
                       return (
@@ -217,9 +284,11 @@ const MessageCard: React.FC<MessageCardProps> = ({ message, showThinking, artifa
           {/* Screen version */}
           <div
             className={`w-6 h-6 rounded-full text-white flex items-center justify-center
-                          text-sm print:hidden ${isHuman ? "bg-[#5645a1]" : "bg-[#d97656]"}`}
+                          print:hidden ${isHuman ? "bg-[#5645a1]" : "bg-[#d97656]"} ${
+                            isHuman && humanInitials.length > 1 ? "text-xs" : "text-sm"
+                          }`}
           >
-            {isHuman ? "H" : "C"}
+            {isHuman ? humanInitials : "C"}
           </div>
         </div>
 
@@ -336,6 +405,12 @@ const ConversationView: React.FC<{
 }> = ({ data, usersByUuid, onBack }) => {
   const accountUuid = (data as { account?: { uuid?: string } }).account?.uuid;
   const userInfo = accountUuid ? usersByUuid?.get(accountUuid) : undefined;
+  const humanInitials = (() => {
+    const parts = userInfo?.full_name?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (parts.length === 0) return "H";
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  })();
   const [showThinking, setShowThinking] = useState(false);
   const [showArtifactsInExport, setShowArtifactsInExport] = useState(true);
   const [showColophonInExport, setShowColophonInExport] = useState(true);
@@ -876,6 +951,24 @@ const ConversationView: React.FC<{
             })}
           </span>
         </div>
+        {data.summary && (
+          <ReactMarkdown
+            className="prose prose-sm max-w-none mt-4 text-sm text-gray-700 prose-code:before:content-none prose-code:after:content-none"
+            components={{
+              code: ({ className, children, ...props }) => (
+                <code
+                  {...props}
+                  className={`text-[#986460] bg-[#f1f0eb] font-normal ${className ?? ""}`}
+                >
+                  {children}
+                </code>
+              ),
+              p: ({ children }) => <p className="m-0">{children}</p>,
+            }}
+          >
+            {data.summary}
+          </ReactMarkdown>
+        )}
       </div>
 
       {sortedMessages.map((message) => (
@@ -884,6 +977,7 @@ const ConversationView: React.FC<{
           message={message}
           showThinking={showThinking}
           artifactNumberMap={artifactNumberMap}
+          humanInitials={humanInitials}
         />
       ))}
 
