@@ -257,8 +257,17 @@ const ConversationItemSchema = z
 // Union type that accepts both formats
 export const ChatDataSchema = z.union([IndividualChatSchema, ConversationItemSchema]);
 
+// Schema for entries in users.json from a Claude data export
+export const UserExportSchema = z
+  .object({
+    uuid: z.string().optional(),
+    full_name: z.string().optional(),
+  })
+  .passthrough();
+
 // Export inferred types
 export type ChatData = z.infer<typeof ChatDataSchema>;
+export type UserExport = z.infer<typeof UserExportSchema>;
 export type ChatMessage =
   | z.infer<typeof ChatMessageSchema>
   | z.infer<typeof ConversationMessageSchema>;

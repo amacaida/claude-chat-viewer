@@ -2,7 +2,7 @@ import { Calendar, ChevronLeft, PanelLeft, PanelLeftClose, Search, X } from "luc
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { findSearchMatches, type SearchMatch } from "../lib/searchUtils";
-import type { ChatData } from "../schemas/chat";
+import type { ChatData, UserExport } from "../schemas/chat";
 import { sortConversations, type SortField, type SortOrder } from "../utils/sorting";
 
 interface MasterDetailViewProps {
@@ -10,6 +10,7 @@ interface MasterDetailViewProps {
   selectedConversation: ChatData | null;
   onSelectConversation: (conversation: ChatData) => void;
   onBack: () => void;
+  usersByUuid?: Map<string, UserExport>;
   children: React.ReactNode;
 }
 
@@ -18,6 +19,7 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
   selectedConversation,
   onSelectConversation,
   onBack,
+  usersByUuid,
   children,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -318,7 +320,13 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {filteredConversations.map((conversation) => (
+              {filteredConversations.map((conversation) => {
+                const accountUuid = (conversation as { account?: { uuid?: string } }).account
+                  ?.uuid;
+                const userName = accountUuid
+                  ? usersByUuid?.get(accountUuid)?.full_name
+                  : undefined;
+                return (
                 <button
                   key={conversation.uuid}
                   type="button"
@@ -378,9 +386,16 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
                     </div>
                     <span>•</span>
                     <span>{conversation.chat_messages.length} messages</span>
+                    {userName && (
+                      <>
+                        <span>•</span>
+                        <span>{userName}</span>
+                      </>
+                    )}
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

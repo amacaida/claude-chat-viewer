@@ -5,7 +5,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { parseMessage } from "../lib/messageParser";
 import { chatToHtml, chatToMarkdown, chatToText } from "../lib/utils";
-import { type ChatData, ChatDataSchema, type ChatMessage } from "../schemas/chat";
+import { type ChatData, ChatDataSchema, type ChatMessage, type UserExport } from "../schemas/chat";
 import { Artifact } from "./Artifact";
 import { ConversationBrowser } from "./ConversationBrowser";
 import { JsonInput } from "./JsonInput";
@@ -329,7 +329,13 @@ const sanitizeZipEntryName = (input: string, fallback: string) => {
   return fallbackCandidate || "artifact.txt";
 };
 
-const ConversationView: React.FC<{ data: ChatData; onBack?: () => void }> = ({ data, onBack }) => {
+const ConversationView: React.FC<{
+  data: ChatData;
+  usersByUuid?: Map<string, UserExport>;
+  onBack?: () => void;
+}> = ({ data, usersByUuid, onBack }) => {
+  const accountUuid = (data as { account?: { uuid?: string } }).account?.uuid;
+  const userInfo = accountUuid ? usersByUuid?.get(accountUuid) : undefined;
   const [showThinking, setShowThinking] = useState(false);
   const [showArtifactsInExport, setShowArtifactsInExport] = useState(true);
   const [showColophonInExport, setShowColophonInExport] = useState(true);
@@ -844,6 +850,9 @@ const ConversationView: React.FC<{ data: ChatData; onBack?: () => void }> = ({ d
         <h1 className="text-2xl font-semibold text-gray-900">
           {data.name || "Untitled Conversation"}
         </h1>
+        {userInfo?.full_name && (
+          <div className="mt-1 text-sm text-gray-500">{userInfo.full_name}</div>
+        )}
         <div className="mt-3 text-sm text-gray-600">
           <span>
             Created:{" "}
@@ -944,6 +953,7 @@ const ChatViewer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"json" | "view" | "browse" | "master-detail">("json");
   const [chatData, setChatData] = useState<ChatData | null>(null);
   const [conversationList, setConversationList] = useState<ChatData[] | null>(null);
+  const [usersByUuid, setUsersByUuid] = useState<Map<string, UserExport>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
@@ -989,8 +999,17 @@ const ChatViewer: React.FC = () => {
     updateURL("view", data.uuid);
   };
 
-  const handleConversationList = (conversations: ChatData[], warning?: string) => {
+  const handleConversationList = (
+    conversations: ChatData[],
+    opts?: { warning?: string; users?: UserExport[] },
+  ) => {
     setConversationList(conversations);
+    const map = new Map<string, UserExport>();
+    for (const u of opts?.users ?? []) {
+      if (u.uuid) map.set(u.uuid, u);
+    }
+    setUsersByUuid(map);
+    const warning = opts?.warning;
 
     if (warning) {
       // Store full details for copying
@@ -1094,6 +1113,7 @@ const ChatViewer: React.FC = () => {
 
   const handleBackToInput = () => {
     setConversationList(null);
+    setUsersByUuid(new Map());
     setChatData(null);
     setLoadWarning(null);
     setFullErrorDetails(null);
@@ -1509,13 +1529,14 @@ const ChatViewer: React.FC = () => {
                 <MasterDetailView
                   conversations={conversationList}
                   selectedConversation={chatData}
+                  usersByUuid={usersByUuid}
                   onSelectConversation={(conversation) => {
                     setChatData(conversation);
                     updateURL("view", conversation.uuid);
                   }}
                   onBack={handleBackToInput}
                 >
-                  {chatData && <ConversationView data={chatData} />}
+                  {chatData && <ConversationView data={chatData} usersByUuid={usersByUuid} />}
                 </MasterDetailView>
               </div>
             </div>
@@ -1526,12 +1547,12 @@ const ChatViewer: React.FC = () => {
               onBack={handleBackToInput}
             />
           ) : activeTab === "view" && chatData ? (
-            <ConversationView data={chatData} onBack={handleBackToInput} />
+            <ConversationView data={chatData} usersByUuid={usersByUuid} onBack={handleBackToInput} />
           ) : null}
         </div>
 
         {/* Show conversation view directly when printing */}
-        <div className="hidden print:block">{chatData && <ConversationView data={chatData} />}</div>
+        <div className="hidden print:block">{chatData && <ConversationView data={chatData} usersByUuid={usersByUuid} />}</div>
       </div>
     </div>
   );
