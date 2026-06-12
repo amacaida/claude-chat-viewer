@@ -32,6 +32,15 @@ A web application for viewing Claude chat conversations from exported JSON files
 - Responsive design
 - Persistent storage of last viewed conversation
 
+## Known Limitations of Claude's Export Format
+
+Claude's data export (ZIP or `conversations.json`) does not include certain fields:
+
+- **Model name**: The model used for each conversation (e.g. Sonnet, Opus) is not present in exported files, so the viewer cannot display it.
+- **Thinking/reasoning**: Extended thinking content is not included in exports. The "Show thinking" toggle only applies to inline `<antThinking>` tags that occasionally appear in older conversation text.
+
+These are limitations of what Claude.ai exports, not of the viewer itself.
+
 ## Privacy
 
 **Your data stays private.** This application runs entirely in your browser as a static website. Your conversations and files:
