@@ -101,13 +101,24 @@ const MessageCard: React.FC<MessageCardProps> = ({
       }
 
       if (item.type === "thinking") {
+        // Newer exports redact the raw thinking text and keep only short
+        // summaries; show those when that's all there is, and render nothing
+        // for items with neither.
+        const rawThinking = item.thinking?.trim() ? item.thinking : "";
+        const summaryText = rawThinking
+          ? ""
+          : ((item.summaries ?? []) as { summary?: string }[])
+              .map((s) => s?.summary)
+              .filter(Boolean)
+              .join("\n");
+        if (!rawThinking && !summaryText) return null;
         if (!showThinking) {
           return (
             <div
               key={`${message.uuid}-thinking-hidden-${index}`}
               className="mx-4 my-2 inline-flex items-center px-2 py-1 bg-purple-50 border border-purple-100 rounded text-xs text-purple-600"
             >
-              thinking (hidden — toggle "Show thinking" to view)
+              thinking (hidden)
             </div>
           );
         }
@@ -116,8 +127,12 @@ const MessageCard: React.FC<MessageCardProps> = ({
             key={`${message.uuid}-thinking-${index}`}
             className="mx-4 my-4 bg-purple-50 rounded-2xl border border-purple-100 p-4"
           >
-            <div className="text-sm text-purple-700 mb-2">Thinking Process</div>
-            <div className="text-sm text-purple-600 whitespace-pre-wrap">{item.thinking}</div>
+            <div className="text-sm text-purple-700 mb-2">
+              {rawThinking ? "Thinking Process" : "Thinking Summary"}
+            </div>
+            <div className="text-sm text-purple-600 whitespace-pre-wrap">
+              {rawThinking || summaryText}
+            </div>
           </div>
         );
       }
@@ -238,16 +253,12 @@ const MessageCard: React.FC<MessageCardProps> = ({
               key={file.file_uuid || `${file.file_name}-${file.created_at}`}
               className="inline-flex items-center px-3 py-2 bg-[#f5f4ef] border border-[#e8e7df] rounded-lg"
             >
-              <a
-                href={`https://api.claude.ai/${file.preview_url}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-800 hover:underline text-sm"
-              >
-                {message.files && message.files.length > 1
-                  ? `Attachment #${i + 1}/${message.files.length}`
-                  : "Attachment"}
-              </a>
+              <span className="text-gray-700 text-sm">
+                {file.file_name ||
+                  (message.files && message.files.length > 1
+                    ? `Attachment #${i + 1}/${message.files.length}`
+                    : "Attachment")}
+              </span>
             </div>
           ))}
         </div>
@@ -620,12 +631,17 @@ const ConversationView: React.FC<{
     });
   });
 
-  // Check if any message contains thinking segments
+  // Check if any message contains thinking with something to show, either as
+  // structured thinking content items (raw text or summaries) or embedded in
+  // message text
   const hasThinkingSegments = data.chat_messages.some((message) =>
     message.content.some(
       (item) =>
-        item.type === "text" &&
-        parseMessage(item.text).some((segment) => segment.type === "thinking"),
+        (item.type === "thinking" &&
+          (Boolean(item.thinking?.trim()) ||
+            ((item.summaries ?? []) as { summary?: string }[]).some((s) => s?.summary))) ||
+        (item.type === "text" &&
+          parseMessage(item.text).some((segment) => segment.type === "thinking")),
     ),
   );
 
