@@ -1,6 +1,7 @@
 import { Brain, Calendar, ChevronLeft, PanelLeft, PanelLeftClose, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { isDeletedConversation } from "../lib/deletedConversation";
 import { findSearchMatches, type SearchMatch } from "../lib/searchUtils";
 import type { ChatData, UserExport } from "../schemas/chat";
 import { sortConversations, type SortField, type SortOrder } from "../utils/sorting";
@@ -336,6 +337,7 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
                 const userName = accountUuid
                   ? usersByUuid?.get(accountUuid)?.full_name
                   : undefined;
+                const deleted = isDeletedConversation(conversation);
                 return (
                 <button
                   key={conversation.uuid}
@@ -353,9 +355,22 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
                     }
                   }}
                 >
-                  <h3 className="font-medium text-sm text-gray-900 truncate">
-                    {conversation.name || "Untitled Conversation"}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3
+                      className={`font-medium text-sm truncate ${
+                        deleted ? "text-gray-500 italic" : "text-gray-900"
+                      }`}
+                    >
+                      {deleted
+                        ? "Deleted Conversation"
+                        : conversation.name || "Untitled Conversation"}
+                    </h3>
+                    {deleted && (
+                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-gray-100 border border-gray-200 text-gray-500 rounded">
+                        Deleted
+                      </span>
+                    )}
+                  </div>
                   {conversation.summary && (
                     <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                       {conversation.summary}

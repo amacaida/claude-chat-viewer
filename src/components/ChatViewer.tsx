@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import mime from "mime";
 import { lazy, Suspense, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { isDeletedConversation } from "../lib/deletedConversation";
 import { parseMessage } from "../lib/messageParser";
 import { chatToHtml, chatToMarkdown, chatToText } from "../lib/utils";
 import {
@@ -418,6 +419,7 @@ const ConversationView: React.FC<{
     if (parts.length === 1) return parts[0][0].toUpperCase();
     return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   })();
+  const isDeleted = isDeletedConversation(data);
   const [showThinking, setShowThinking] = useState(false);
   const [showArtifactsInExport, setShowArtifactsInExport] = useState(true);
   const [showColophonInExport, setShowColophonInExport] = useState(true);
@@ -930,7 +932,7 @@ const ConversationView: React.FC<{
 
       <div className="bg-white rounded-lg border border-[#e8e7df] p-6">
         <h1 className="text-2xl font-semibold text-gray-900">
-          {data.name || "Untitled Conversation"}
+          {data.name || (isDeleted ? "Deleted Conversation" : "Untitled Conversation")}
         </h1>
         {userInfo?.full_name && (
           <div className="mt-1 text-sm text-gray-500">{userInfo.full_name}</div>
@@ -978,15 +980,25 @@ const ConversationView: React.FC<{
         )}
       </div>
 
-      {sortedMessages.map((message) => (
-        <MessageCard
-          key={message.uuid}
-          message={message}
-          showThinking={showThinking}
-          artifactNumberMap={artifactNumberMap}
-          humanInitials={humanInitials}
-        />
-      ))}
+      {isDeleted ? (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+          <div className="text-gray-700 font-medium mb-1">This conversation was deleted</div>
+          <div className="text-sm text-gray-500">
+            Its {sortedMessages.length} message{sortedMessages.length === 1 ? "" : "s"} were
+            removed from the export; only metadata such as dates and attachment names remains.
+          </div>
+        </div>
+      ) : (
+        sortedMessages.map((message) => (
+          <MessageCard
+            key={message.uuid}
+            message={message}
+            showThinking={showThinking}
+            artifactNumberMap={artifactNumberMap}
+            humanInitials={humanInitials}
+          />
+        ))
+      )}
 
       {/* Print-only artifacts appendix */}
       {showArtifactsInExport && artifacts.length > 0 && (
