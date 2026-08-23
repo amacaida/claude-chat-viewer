@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { isDeletedConversation } from "../lib/deletedConversation";
 import { findSearchMatches, type SearchMatch } from "../lib/searchUtils";
+import { assignUserTints } from "../lib/userTints";
 import type { ChatData, UserExport } from "../schemas/chat";
 import { sortConversations, type SortField, type SortOrder } from "../utils/sorting";
 
@@ -32,6 +33,8 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
+  const tintsByUuid = assignUserTints(usersByUuid?.keys() ?? []);
 
   // Auto-collapse sidebar on mobile by default
   useEffect(() => {
@@ -338,14 +341,25 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
                   ? usersByUuid?.get(accountUuid)?.full_name
                   : undefined;
                 const deleted = isDeletedConversation(conversation);
+                const tint = accountUuid ? tintsByUuid.get(accountUuid) : undefined;
+                const isSelected = selectedConversation?.uuid === conversation.uuid;
+                // Tinted rows deepen their own tint on hover/selection instead
+                // of the gray/blue backgrounds; rows without a resolvable user
+                // keep the original styling.
+                const backgroundClasses = tint
+                  ? isSelected
+                    ? "bg-[color:color-mix(in_oklab,var(--user-tint),#1f2937_7%)]"
+                    : "bg-[color:var(--user-tint)] hover:bg-[color:color-mix(in_oklab,var(--user-tint),#1f2937_5%)]"
+                  : isSelected
+                    ? "bg-blue-50"
+                    : "hover:bg-gray-50";
                 return (
                 <button
                   key={conversation.uuid}
                   type="button"
-                  className={`text-left w-full px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                    selectedConversation?.uuid === conversation.uuid
-                      ? "bg-blue-50 border-l-2 border-blue-500"
-                      : ""
+                  style={tint ? ({ "--user-tint": tint } as React.CSSProperties) : undefined}
+                  className={`text-left w-full px-4 py-3 cursor-pointer transition-colors ${backgroundClasses} ${
+                    isSelected ? "border-l-2 border-blue-500" : ""
                   }`}
                   onClick={() => {
                     onSelectConversation(conversation);
@@ -404,7 +418,11 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                  <div
+                    className={`flex items-center gap-3 mt-2 text-xs ${
+                      tint ? "text-gray-600" : "text-gray-500"
+                    }`}
+                  >
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
                       <span>{formatDate(conversation.created_at)}</span>
