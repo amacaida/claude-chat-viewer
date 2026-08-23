@@ -1,4 +1,4 @@
-import { AlertCircle, Archive, CheckCircle, Clipboard, FileJson, Upload } from "lucide-react";
+import { AlertCircle, Archive, CheckCircle, Clipboard, FileJson, FolderOpen, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ZodInvalidUnionIssue, type ZodIssue, z } from "zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -94,6 +94,7 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
   const [isDragging, setIsDragging] = useState(false);
   const [isValidJson, setIsValidJson] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -661,6 +662,101 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
     fileInputRef.current?.click();
   };
 
+  // Load a folder of split-export ZIPs (new Claude export format where
+  // conversations.json and users.json ship in separate category archives,
+  // e.g. conversations-000.zip and light_metadata-000.zip). Reads every .zip
+  // in the selected folder, merges all conversations-*.zip parts, and pulls
+  // users.json from whichever archive contains it.
+  const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setError(null);
+    const zipFiles = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".zip"));
+
+    if (zipFiles.length === 0) {
+      setError("No .zip files found in the selected folder. Please choose an export folder.");
+      // Reset so the same folder can be re-selected
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const JSZip = (await import("jszip")).default;
+
+      const conversationArrays: unknown[] = [];
+      let users: UserExport[] | undefined;
+      let conversationsFound = false;
+
+      for (const file of zipFiles) {
+        const zip = await JSZip.loadAsync(file);
+
+        // Merge every conversations-*.zip part (each contains conversations.json)
+        const conversationsFile = zip.file("conversations.json");
+        if (conversationsFile) {
+          conversationsFound = true;
+          try {
+            const content = await conversationsFile.async("string");
+            const parsed = JSON.parse(content);
+            if (Array.isArray(parsed)) {
+              conversationArrays.push(...parsed);
+            } else if (parsed && typeof parsed === "object") {
+              // Single-conversation export format
+              conversationArrays.push(parsed);
+            }
+          } catch (err) {
+            if (err instanceof Error) {
+              setError(`Invalid JSON in ${file.name}: ${err.message}`);
+            } else {
+              setError(`Failed to parse conversations.json from ${file.name}`);
+            }
+            event.target.value = "";
+            return;
+          }
+        }
+
+        // users.json lives in light_metadata-*.zip in the split format, but
+        // accept it from any archive (old batch zips bundled it with conversations).
+        if (!users) {
+          const usersFile = zip.file("users.json");
+          if (usersFile) {
+            try {
+              const raw = JSON.parse(await usersFile.async("string"));
+              const parsed = z.array(UserExportSchema).safeParse(raw);
+              if (parsed.success && parsed.data.length > 0) users = parsed.data;
+            } catch {
+              // Silently ignore; users.json is additive
+            }
+          }
+        }
+      }
+
+      if (!conversationsFound || conversationArrays.length === 0) {
+        setError(
+          "No conversations.json found in any ZIP archive. Please make sure you're selecting a Claude export folder.",
+        );
+        event.target.value = "";
+        return;
+      }
+
+      setJsonText(""); // Folder mode bypasses the paste textarea
+      processJsonData(conversationArrays, { users });
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(`Error reading export folder: ${err.message}`);
+      } else {
+        setError("Failed to read export folder");
+      }
+    }
+
+    // Reset so the same folder can be re-selected
+    event.target.value = "";
+  };
+
+  const handleFolderClick = () => {
+    folderInputRef.current?.click();
+  };
+
   const loadSampleData = () => {
     // Assemble sample conversations from imported files
     const sampleConversations = [
@@ -842,11 +938,19 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
                     <Archive className="h-12 w-12 mx-auto text-gray-400 mb-3" />
                     <p className="text-gray-600 mb-4">Drag and drop your ZIP or JSON file here</p>
                     <p className="text-gray-500 text-sm mb-4">or</p>
-                    <Button onClick={handleUploadClick} className="mx-auto">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Choose File
-                    </Button>
-                    <p className="text-xs text-gray-500 mt-3">Accepts .zip and .json files</p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Button onClick={handleUploadClick} className="mx-auto">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Choose File
+                      </Button>
+                      <Button onClick={handleFolderClick} variant="outline" className="mx-auto">
+                        <FolderOpen className="h-4 w-4 mr-2" />
+                        Load Export Folder
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3">
+                      Accepts .zip and .json files, or a folder of split-export ZIPs
+                    </p>
                   </div>
                 )}
               </section>
@@ -1165,6 +1269,17 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
         type="file"
         accept=".json,.zip"
         onChange={handleFileUpload}
+        className="hidden"
+      />
+
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-expect-error - webkitdirectory attributes are non-standard but well-supported in browsers
+        webkitdirectory=""
+        directory=""
+        multiple
+        onChange={handleFolderUpload}
         className="hidden"
       />
 
