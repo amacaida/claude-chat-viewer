@@ -13,7 +13,16 @@ import sampleMath from "../data/sampleConversations/math-tutoring.json";
 // Import sample conversations
 import samplePython from "../data/sampleConversations/python.json";
 import sampleWebDev from "../data/sampleConversations/webdev.json";
-import { type ChatData, ChatDataSchema, type UserExport, UserExportSchema } from "../schemas/chat";
+import { designChatToChatData } from "../lib/designChatAdapter";
+import {
+  type ChatData,
+  ChatDataSchema,
+  DesignChatSchema,
+  type MemoryExport,
+  MemoryExportSchema,
+  type UserExport,
+  UserExportSchema,
+} from "../schemas/chat";
 
 type ConversationOption = {
   name: string;
@@ -25,7 +34,12 @@ interface JsonInputProps {
   onValidJson: (data: ChatData) => void;
   onConversationList: (
     conversations: ChatData[],
-    opts?: { warning?: string; users?: UserExport[] },
+    opts?: {
+      warning?: string;
+      users?: UserExport[];
+      memories?: MemoryExport[];
+      projectNames?: Record<string, string>;
+    },
   ) => void;
 }
 
@@ -158,7 +172,14 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
     }
   };
 
-  const processJsonData = (data: unknown, extras?: { users?: UserExport[] }) => {
+  const processJsonData = (
+    data: unknown,
+    extras?: {
+      users?: UserExport[];
+      memories?: MemoryExport[];
+      projectNames?: Record<string, string>;
+    },
+  ) => {
     // Handle array of conversations
     if (Array.isArray(data)) {
       if (data.length === 0) {
@@ -272,7 +293,12 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
           warningMsg = errorDetails.join("\n");
           console.log("Warning message being sent:", warningMsg);
         }
-        onConversationList(validConversations, { warning: warningMsg, users: extras?.users });
+        onConversationList(validConversations, {
+          warning: warningMsg,
+          users: extras?.users,
+          memories: extras?.memories,
+          projectNames: extras?.projectNames,
+        });
         setError(null);
         setOptions([]);
         return;
@@ -323,7 +349,19 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
           );
 
           const warningMsg = errorDetails.join("\n");
-          onConversationList(validConversations, { warning: warningMsg, users: extras?.users });
+          onConversationList(validConversations, {
+          warning: warningMsg,
+          users: extras?.users,
+          memories: extras?.memories,
+          projectNames: extras?.projectNames,
+        });
+        } else if (extras?.memories && extras.memories.length > 0) {
+          // Keep the browser view so the Memories entry point stays reachable
+          onConversationList(validConversations, {
+            users: extras?.users,
+            memories: extras.memories,
+            projectNames: extras?.projectNames,
+          });
         } else {
           // Only one conversation and it's valid - show it directly
           onValidJson(validConversations[0]);
@@ -685,6 +723,9 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
       const JSZip = (await import("jszip")).default;
 
       const conversationArrays: unknown[] = [];
+      const designChats: ChatData[] = [];
+      const memories: MemoryExport[] = [];
+      const projectNames: Record<string, string> = {};
       let users: UserExport[] | undefined;
       let conversationsFound = false;
 
@@ -729,18 +770,64 @@ export const JsonInput: React.FC<JsonInputProps> = ({ onValidJson, onConversatio
             }
           }
         }
+
+        // memories/<account-uuid>.json — Claude's per-user memory profiles
+        for (const entry of zip.file(/^memories\/.+\.json$/)) {
+          try {
+            const parsed = MemoryExportSchema.safeParse(JSON.parse(await entry.async("string")));
+            if (parsed.success) memories.push(parsed.data);
+          } catch {
+            // Silently ignore; memories are additive
+          }
+        }
+
+        // design_chats/<uuid>.json — chats from the Designs surface; adapt
+        // them into ChatData so they browse alongside regular conversations.
+        for (const entry of zip.file(/^design_chats\/.+\.json$/)) {
+          try {
+            const parsed = DesignChatSchema.safeParse(JSON.parse(await entry.async("string")));
+            if (parsed.success) designChats.push(designChatToChatData(parsed.data));
+          } catch {
+            // Silently ignore; design chats are additive
+          }
+        }
+
+        // projects/<uuid>.json — only used to label project memories by name
+        for (const entry of zip.file(/^projects\/.+\.json$/)) {
+          try {
+            const project: unknown = JSON.parse(await entry.async("string"));
+            if (
+              project &&
+              typeof project === "object" &&
+              typeof (project as { uuid?: unknown }).uuid === "string" &&
+              typeof (project as { name?: unknown }).name === "string"
+            ) {
+              projectNames[(project as { uuid: string }).uuid] = (
+                project as { name: string }
+              ).name;
+            }
+          } catch {
+            // Silently ignore; project names are cosmetic
+          }
+        }
       }
 
-      if (!conversationsFound || conversationArrays.length === 0) {
+      conversationArrays.push(...designChats);
+
+      if (!conversationsFound && conversationArrays.length === 0) {
         setError(
-          "No conversations.json found in any ZIP archive. Please make sure you're selecting a Claude export folder.",
+          "No conversations.json (or design chats) found in any ZIP archive. Please make sure you're selecting a Claude export folder.",
         );
         event.target.value = "";
         return;
       }
 
       setJsonText(""); // Folder mode bypasses the paste textarea
-      processJsonData(conversationArrays, { users });
+      processJsonData(conversationArrays, {
+        users,
+        memories: memories.length > 0 ? memories : undefined,
+        projectNames: Object.keys(projectNames).length > 0 ? projectNames : undefined,
+      });
     } catch (err) {
       if (err instanceof Error) {
         setError(`Error reading export folder: ${err.message}`);

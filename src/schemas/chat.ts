@@ -265,9 +265,46 @@ export const UserExportSchema = z
   })
   .passthrough();
 
+// Schema for entries under memories/ in a split Claude data export
+export const MemoryExportSchema = z
+  .object({
+    account_uuid: z.string(),
+    conversations_memory: z.string().optional(),
+    project_memories: z.record(z.string()).optional(),
+  })
+  .passthrough();
+
+// Schema for entries under design_chats/ in a split Claude data export.
+// Message content is intentionally loose; designChatToChatData normalizes it.
+const DesignChatMessageSchema = z
+  .object({
+    uuid: z.string().optional(),
+    role: z.string(),
+    content: z.record(z.any()).optional(),
+    created_at: z.string().optional(),
+  })
+  .passthrough();
+
+export const DesignChatSchema = z
+  .object({
+    uuid: z.string(),
+    title: z.string().optional(),
+    project: z
+      .object({ uuid: z.string().optional(), name: z.string().optional() })
+      .passthrough()
+      .optional(),
+    created_at: z.string(),
+    updated_at: z.string(),
+    messages: z.array(DesignChatMessageSchema),
+  })
+  .passthrough();
+
 // Export inferred types
 export type ChatData = z.infer<typeof ChatDataSchema>;
 export type UserExport = z.infer<typeof UserExportSchema>;
+export type MemoryExport = z.infer<typeof MemoryExportSchema>;
+export type DesignChatExport = z.infer<typeof DesignChatSchema>;
+export type DesignChatMessage = z.infer<typeof DesignChatMessageSchema>;
 export type ChatMessage =
   | z.infer<typeof ChatMessageSchema>
   | z.infer<typeof ConversationMessageSchema>;

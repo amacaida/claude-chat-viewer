@@ -1,4 +1,4 @@
-import { Calendar, ChevronLeft, PanelLeft, PanelLeftClose, Search, X } from "lucide-react";
+import { Brain, Calendar, ChevronLeft, PanelLeft, PanelLeftClose, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { findSearchMatches, type SearchMatch } from "../lib/searchUtils";
@@ -10,6 +10,7 @@ interface MasterDetailViewProps {
   selectedConversation: ChatData | null;
   onSelectConversation: (conversation: ChatData) => void;
   onBack: () => void;
+  onShowMemories?: () => void;
   usersByUuid?: Map<string, UserExport>;
   children: React.ReactNode;
 }
@@ -19,6 +20,7 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
   selectedConversation,
   onSelectConversation,
   onBack,
+  onShowMemories,
   usersByUuid,
   children,
 }) => {
@@ -150,10 +152,18 @@ export const MasterDetailView: React.FC<MasterDetailViewProps> = ({
         {/* Sidebar Header */}
         <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <Button onClick={onBack} variant="outline" size="sm">
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Back to Input
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={onBack} variant="outline" size="sm">
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Back to Input
+              </Button>
+              {onShowMemories && (
+                <Button onClick={onShowMemories} variant="outline" size="sm">
+                  <Brain className="h-4 w-4 mr-2" />
+                  Memories
+                </Button>
+              )}
+            </div>
             <Button
               onClick={() => setSidebarCollapsed(true)}
               variant="ghost"

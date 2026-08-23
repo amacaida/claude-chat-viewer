@@ -5,11 +5,18 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { parseMessage } from "../lib/messageParser";
 import { chatToHtml, chatToMarkdown, chatToText } from "../lib/utils";
-import { type ChatData, ChatDataSchema, type ChatMessage, type UserExport } from "../schemas/chat";
+import {
+  type ChatData,
+  ChatDataSchema,
+  type ChatMessage,
+  type MemoryExport,
+  type UserExport,
+} from "../schemas/chat";
 import { Artifact } from "./Artifact";
 import { ConversationBrowser } from "./ConversationBrowser";
 import { JsonInput } from "./JsonInput";
 import { MasterDetailView } from "./MasterDetailView";
+import { MemoriesView } from "./MemoriesView";
 
 // Lazy load CodeBlock to reduce initial bundle size
 const CodeBlock = lazy(() => import("./CodeBlock").then((m) => ({ default: m.CodeBlock })));
@@ -1044,10 +1051,14 @@ const ConversationView: React.FC<{
 };
 
 const ChatViewer: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"json" | "view" | "browse" | "master-detail">("json");
+  const [activeTab, setActiveTab] = useState<
+    "json" | "view" | "browse" | "master-detail" | "memories"
+  >("json");
   const [chatData, setChatData] = useState<ChatData | null>(null);
   const [conversationList, setConversationList] = useState<ChatData[] | null>(null);
   const [usersByUuid, setUsersByUuid] = useState<Map<string, UserExport>>(new Map());
+  const [memories, setMemories] = useState<MemoryExport[] | null>(null);
+  const [projectNamesByUuid, setProjectNamesByUuid] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
@@ -1095,7 +1106,12 @@ const ChatViewer: React.FC = () => {
 
   const handleConversationList = (
     conversations: ChatData[],
-    opts?: { warning?: string; users?: UserExport[] },
+    opts?: {
+      warning?: string;
+      users?: UserExport[];
+      memories?: MemoryExport[];
+      projectNames?: Record<string, string>;
+    },
   ) => {
     setConversationList(conversations);
     const map = new Map<string, UserExport>();
@@ -1103,6 +1119,8 @@ const ChatViewer: React.FC = () => {
       if (u.uuid) map.set(u.uuid, u);
     }
     setUsersByUuid(map);
+    setMemories(opts?.memories && opts.memories.length > 0 ? opts.memories : null);
+    setProjectNamesByUuid(new Map(Object.entries(opts?.projectNames ?? {})));
     const warning = opts?.warning;
 
     if (warning) {
@@ -1208,6 +1226,8 @@ const ChatViewer: React.FC = () => {
   const handleBackToInput = () => {
     setConversationList(null);
     setUsersByUuid(new Map());
+    setMemories(null);
+    setProjectNamesByUuid(new Map());
     setChatData(null);
     setLoadWarning(null);
     setFullErrorDetails(null);
@@ -1374,8 +1394,8 @@ const ChatViewer: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f1f0e7] print:bg-white">
-      {/* Minimal Header Bar - Hide when in master-detail view */}
-      {activeTab !== "master-detail" && (
+      {/* Minimal Header Bar - Hide when in master-detail or memories view */}
+      {activeTab !== "master-detail" && activeTab !== "memories" && (
         <div className="print:hidden bg-gray-50/80 border-b border-gray-100">
           <div className="max-w-4xl mx-auto px-6 py-1.5 flex justify-between items-center">
             <div className="flex items-center gap-1">
@@ -1462,7 +1482,13 @@ const ChatViewer: React.FC = () => {
         </div>
       )}
 
-      <div className={activeTab === "master-detail" ? "" : "max-w-4xl mx-auto px-6 py-8"}>
+      <div
+        className={
+          activeTab === "master-detail" || activeTab === "memories"
+            ? ""
+            : "max-w-4xl mx-auto px-6 py-8"
+        }
+      >
         <div className="print:hidden">
           {loadError && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
@@ -1629,10 +1655,22 @@ const ChatViewer: React.FC = () => {
                     updateURL("view", conversation.uuid);
                   }}
                   onBack={handleBackToInput}
+                  onShowMemories={memories ? () => setActiveTab("memories") : undefined}
                 >
                   {chatData && <ConversationView data={chatData} usersByUuid={usersByUuid} />}
                 </MasterDetailView>
               </div>
+            </div>
+          ) : activeTab === "memories" && memories ? (
+            <div className="fixed inset-0 top-[49px]">
+              <MemoriesView
+                memories={memories}
+                usersByUuid={usersByUuid}
+                projectNamesByUuid={projectNamesByUuid}
+                onBack={() =>
+                  setActiveTab(conversationList && conversationList.length > 0 ? "master-detail" : "json")
+                }
+              />
             </div>
           ) : activeTab === "browse" && conversationList ? (
             <ConversationBrowser
